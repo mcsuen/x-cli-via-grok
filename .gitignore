@@ -6,3 +6,7 @@ node_modules/
 !.env.example
 coverage/
 .xg-state/
+*.log
+*.jsonl
+runs/
+runtime/

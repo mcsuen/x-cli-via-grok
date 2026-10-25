@@ -17,7 +17,7 @@ const HELP = `x-cli-via-grok ${VERSION} — public Twitter/X research through Gr
   plan --prompt-file FILE                   Preview the readable expanded prompt without sending
   query --prompt-file FILE                  Start one self-contained research request
         [--session ID] [--since YYYY-MM-DD] [--until YYYY-MM-DD]
-        [--timezone Asia/Shanghai] [--language zh-CN] [--wait 40]
+        [--timezone UTC] [--language en] [--wait 40]
   read RUN_ID [--wait 40]                    Read only the matching request's replies
   sessions                                 List local request metadata; no Grok sidebar objects
   release RUN_ID --confirmed-finished       Release local bookkeeping after verifying Grok has finished

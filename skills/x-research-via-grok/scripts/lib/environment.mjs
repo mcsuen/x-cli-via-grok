@@ -90,7 +90,7 @@ export async function inspectEnvironment(dir, config = {}, env = process.env) {
   const secrets = await readJson(join(appDataDir(env), 'sand-secrets.json'), {});
   return {
     node: { version: process.versions.node, supported: nodeCompatible() }, app,
-    cli: { installed: Boolean(cli), path: cli?.path || null, testedVersion: GROK_CLI_VERSION },
+    cli: { installed: Boolean(cli), path: cli?.path || null, pinnedVersion: GROK_CLI_VERSION },
     authentication: {
       source: env.GROK_BOT_GATEWAY_URL && env.GROK_BOT_GATEWAY_TOKEN ? 'gateway-environment' : env.CURSOR_ACCESS_TOKEN ? 'access-token-environment' : descriptor ? 'native-app-session' : secrets['cursor-accounts'] ? 'legacy-app-session' : 'none',
       verified: false, legacySessionAuthorized: config.legacySessionAuthorized === true,
@@ -99,7 +99,7 @@ export async function inspectEnvironment(dir, config = {}, env = process.env) {
   };
 }
 async function legacyToken(dataDir) {
-  if (process.platform !== 'darwin') throw new XgError('AUTH_ADAPTER_UNSUPPORTED', 'The legacy encrypted-session adapter is currently tested on macOS only. Update Grok Bot or use a supported native CLI session.');
+  if (process.platform !== 'darwin') throw new XgError('AUTH_ADAPTER_UNSUPPORTED', 'The legacy encrypted-session adapter supports macOS only. Update Grok Bot or use a supported native CLI session.');
   const secrets = await readJson(join(dataDir, 'sand-secrets.json'));
   let store;
   try { store = JSON.parse(secrets['cursor-accounts']); } catch { throw new XgError('AUTH_REQUIRED', 'Open Grok Bot and sign in, then retry setup.'); }
@@ -147,7 +147,7 @@ export async function connect(dir, config = {}, { install = false, authorize = f
   if (!spec) throw new XgError('CLI_REQUIRED', 'Run setup to install the missing grok-bot-cli automatically.');
   const version = await execute(spec.command, [...spec.prefix, '--version'], { env: childEnv });
   const match = version.stdout.match(/\b(\d+\.\d+\.\d+)\b/);
-  if (version.code !== 0 || !match || match[1].localeCompare(GROK_CLI_VERSION, undefined, { numeric: true }) < 0) throw new XgError('CLI_VERSION_UNSUPPORTED', `grok-bot-cli ${GROK_CLI_VERSION}+ is required. Use setup --install-cli to install the tested version privately.`);
+  if (version.code !== 0 || !match || match[1].localeCompare(GROK_CLI_VERSION, undefined, { numeric: true }) < 0) throw new XgError('CLI_VERSION_UNSUPPORTED', `grok-bot-cli ${GROK_CLI_VERSION}+ is required. Use setup --install-cli to install the pinned version privately.`);
   let account = 'native-app';
   if (status.authentication.source === 'legacy-app-session') {
     if (!authorize && !config.legacySessionAuthorized) throw new XgError('AUTHORIZATION_REQUIRED', 'The saved login uses the legacy app format. Tell the user that keychain access is needed, then run setup --authorize-app-session. The user must handle any OS approval dialog.');

@@ -119,8 +119,8 @@ export async function pollResearch(client, dir, config, run, { wait = 0 } = {}) 
       entries = entriesOf(data, run.bot.id);
       tailLength = rooted ? 0 : entries.length;
       matched = correlateEntries(entries, run);
-      // Observed upstream behavior: a rooted read can contain only the user root,
-      // while send-message replies appear exclusively in the transcript tail.
+      // A rooted read may contain only the user root while assistant replies
+      // are available in the transcript tail.
       // Merge those bounded sources, but keep exact requestId ownership mandatory.
       const done = e => entryText(e).split(/\r?\n/).some(line => line.trim() === `XG_DONE ${run.id}`);
       if (rooted && !matched.some(done)) {

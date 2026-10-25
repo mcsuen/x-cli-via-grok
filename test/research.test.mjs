@@ -7,9 +7,12 @@ import { dateWindow, BOT_DESCRIPTION, isDedicatedBot, buildPrompt, postLinks } f
 import { ensureBot, loadConfig, beginResearch, pollResearch, correlateEntries, runPath } from '../skills/x-research-via-grok/scripts/lib/research.mjs';
 import { withLock, redact, execute } from '../skills/x-research-via-grok/scripts/lib/runtime.mjs';
 import { parseArgs, installSkill } from '../skills/x-research-via-grok/scripts/xg.mjs';
-import { nodeCompatible, installGrokCli, inspectEnvironment } from '../skills/x-research-via-grok/scripts/lib/environment.mjs';
+import { nodeCompatible } from '../skills/x-research-via-grok/scripts/lib/environment.mjs';
 
-const window = () => dateWindow({ since: '2026-07-25', until: '2026-10-25', timezone: 'Asia/Shanghai', now: new Date('2026-10-25T13:00:00Z') });
+const window = () => dateWindow({ since: '2024-08-25', until: '2024-11-02', timezone: 'UTC', now: new Date('2024-11-02T13:00:00Z') });
+const syntheticPostId = timestamp => ((BigInt(Date.parse(timestamp)) - 1288834974657n) << 22n).toString();
+const examplePostId = syntheticPostId('2024-10-01T12:00:00Z');
+const examplePostUrl = `https://x.com/ExampleOrg/status/${examplePostId}`;
 const temp = async t => { const dir = await mkdtemp(join(tmpdir(), 'xg-test-')); t.after(() => rm(dir, { recursive: true, force: true })); return dir; };
 class FakeClient {
   profileKey = 'account-a'; bots = []; calls = []; entries = []; sends = 0; rootOnly = false;
@@ -30,10 +33,10 @@ class FakeClient {
   }
 }
 test('date windows preserve partial months and the user timezone', () => {
-  assert.deepEqual(window().slices, [{ since: '2026-07-25', until: '2026-07-31' }, { since: '2026-08-01', until: '2026-08-31' }, { since: '2026-09-01', until: '2026-09-30' }, { since: '2026-10-01', until: '2026-10-25' }]);
-  assert.equal(dateWindow({ now: new Date('2026-10-25T17:00:00Z'), timezone: 'Asia/Shanghai' }).until, '2026-10-26');
+  assert.deepEqual(window().slices, [{ since: '2024-08-25', until: '2024-08-31' }, { since: '2024-09-01', until: '2024-09-30' }, { since: '2024-10-01', until: '2024-10-31' }, { since: '2024-11-01', until: '2024-11-02' }]);
+  assert.equal(dateWindow({ now: new Date('2024-11-02T17:00:00Z'), timezone: 'Asia/Tokyo' }).until, '2024-11-03');
   assert.throws(() => dateWindow({ until: 'banana' }), { code: 'DATE_RANGE_INVALID' });
-  assert.throws(() => dateWindow({ since: '2026-02-30' }), { code: 'DATE_RANGE_INVALID' });
+  assert.throws(() => dateWindow({ since: '2024-02-30' }), { code: 'DATE_RANGE_INVALID' });
   assert.throws(() => dateWindow({ until: '2099-01-01' }), { code: 'DATE_RANGE_INVALID' });
 });
 test('a general bot is preserved and only one dedicated bot is created and reused', async t => {
@@ -68,18 +71,18 @@ test('missing or repurposed pinned bots fail closed', async t => {
 });
 test('only gateway request-owned replies are returned; stale and other-session replies are excluded', async t => {
   const dir = await temp(t), client = new FakeClient(), config = await loadConfig(dir);
-  const run = await beginResearch(client, dir, config, { goal: '请查 Booking.com\n保留这个换行和 $() 字面内容', session: 'chat-one', window: window() });
-  assert.match(client.calls.find(a => a[0] === 'send')[2], /Booking\.com\n保留这个换行和 \$\(\)/);
+  const run = await beginResearch(client, dir, config, { goal: 'Research Example Topic\nPreserve this newline and literal $() text', session: 'chat-one', window: window() });
+  assert.match(client.calls.find(a => a[0] === 'send')[2], /Example Topic\nPreserve this newline and literal \$\(\)/);
   client.entries.push(
     { id: 'old', kind: 'send-message', requestId: 'old-request', message: { content: `PRIVATE OLD RESULT\nXG_DONE ${run.id}` } },
     { id: 'other', kind: 'send-message', requestId: 'other-request', message: { content: 'OTHER SESSION' } },
-    { id: 'ack', kind: 'send-message', requestId: 'request-a', message: { content: 'Searching…' } }
+    { id: 'ack', kind: 'send-message', requestId: 'request-a', message: { content: 'Searching...' } }
   );
   const pending = await pollResearch(client, dir, config, run);
   assert.equal(pending.status, 'pending');
   assert.equal(pending.progress.length, 1);
   await assert.rejects(beginResearch(client, dir, config, { goal: 'new', window: window() }), { code: 'RESEARCH_BUSY' });
-  client.entries.push({ id: 'final', kind: 'send-message', requestId: 'request-a', message: { content: `Found one https://x.com/Techmeme/status/2112874555111035390\nXG_DONE ${run.id}` } });
+  client.entries.push({ id: 'final', kind: 'send-message', requestId: 'request-a', message: { content: `Found one ${examplePostUrl}\nXG_DONE ${run.id}` } });
   const complete = await pollResearch(client, dir, config, run);
   assert.equal(complete.status, 'complete');
   assert.equal(complete.postLinks.length, 1);
@@ -156,17 +159,17 @@ test('CLI parsing rejects irrelevant capabilities and unsafe paths', () => {
   assert.equal(nodeCompatible('24.0.0'), true);
 });
 test('post ID dates are diagnostic, URLs are deduplicated, and completion prompts are readable', () => {
-  const links = postLinks('https://twitter.com/Techmeme/status/2112874555111035390 https://x.com/Techmeme/status/2112874555111035390', window());
-  assert.equal(links.length, 1); assert.equal(links[0].dateUtc, '2026-10-21');
-  const prompt = buildPrompt({ goal: '用户目标\n第二行', sessionId: 'one', runId: 'two', window: window() });
-  assert.match(prompt, /用户目标\n第二行/);
-  assert.match(prompt, /2026-07-25—2026-07-31/);
+  const links = postLinks(`https://twitter.com/ExampleOrg/status/${examplePostId} ${examplePostUrl}`, window());
+  assert.equal(links.length, 1); assert.equal(links[0].dateUtc, '2024-10-01');
+  const prompt = buildPrompt({ goal: 'Research objective\nAdditional context', sessionId: 'one', runId: 'two', window: window() });
+  assert.match(prompt, /Research objective\nAdditional context/);
+  assert.match(prompt, /2024-08-25 to 2024-08-31/);
   assert.throws(() => buildPrompt({ goal: ' ', sessionId: 'one', runId: 'two', window: window() }), { code: 'PROMPT_INVALID' });
 });
 test('post dates are checked in the user timezone rather than against UTC calendar dates', () => {
-  const range = dateWindow({ since: '2026-10-24', until: '2026-10-25', timezone: 'Asia/Shanghai', now: new Date('2026-10-25T14:00:00Z') });
-  const [post] = postLinks('https://x.com/NASA/status/2113776971603689874', range);
-  assert.equal(post.dateUtc, '2026-10-23');
-  assert.equal(post.dateInUserTimezone, '2026-10-24');
+  const range = dateWindow({ since: '2024-11-02', until: '2024-11-03', timezone: 'Asia/Tokyo', now: new Date('2024-11-03T14:00:00Z') });
+  const [post] = postLinks(`https://x.com/ExampleOrg/status/${syntheticPostId('2024-11-01T18:00:00Z')}`, range);
+  assert.equal(post.dateUtc, '2024-11-01');
+  assert.equal(post.dateInUserTimezone, '2024-11-02');
   assert.equal(post.withinDateWindow, true);
 });

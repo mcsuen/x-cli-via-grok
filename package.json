@@ -1,6 +1,6 @@
 {
   "name": "x-cli-via-grok",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Public Twitter/X research through a dedicated Grok Bot, with portable agent skills.",
   "type": "module",
   "bin": {"x-cli-via-grok": "bin/x-cli-via-grok.mjs"},

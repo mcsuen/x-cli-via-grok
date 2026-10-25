@@ -1,6 +1,6 @@
 interface:
-  display_name: "X / Twitter 研究（Grok）"
+  display_name: "X / Twitter Research via Grok"
   short_description: "Search and analyze public Twitter/X through Grok Bot"
-  default_prompt: "使用 $x-research-via-grok 查询并总结 Twitter/X 上最近关于指定话题的讨论，附真实原帖链接和检索限制。"
+  default_prompt: "Use $x-research-via-grok to summarize recent public Twitter/X discussions about a topic, with original post links and coverage limitations."
 policy:
   allow_implicit_invocation: true

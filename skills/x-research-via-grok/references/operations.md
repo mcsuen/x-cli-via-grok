@@ -1,53 +1,58 @@
-# Environment, authorization, and recovery
+# Operations
 
-## Status and installation
+## Environment and installation
 
-`doctor` is offline: app installation, Node compatibility, CLI presence, session-file presence, and lock metadata. Presence is not proof of a valid login. `doctor --online` validates the live bot list without creating a bot; it may need the user's existing Grok app authorization.
+`doctor` checks app installation, Node compatibility, CLI availability, saved-session presence, and local lock metadata. Saved files do not establish a valid login. `doctor --online` verifies access to the live bot roster without creating a bot.
 
-`setup` automatically installs a missing `grok-bot-cli@0.12.4` with npm into the tool's private `runtime/` directory. It uses `--ignore-scripts` and does not require sudo or alter global PATH. `setup --install-cli` installs that tested version privately even if an older global version exists. It does not auto-update upstream to an untested latest release.
+`setup` installs a missing `grok-bot-cli@0.12.4` through npm into the private `runtime/` directory. Installation uses `--ignore-scripts`, requires no sudo, and leaves global PATH unchanged. `setup --install-cli` installs the pinned version privately even when another version exists globally.
 
-Node.js 22.19+ must already exist. A compatible local NVM/fnm runtime can be selected if the host launched Node 20. Otherwise tell the user to install supported Node.js. Grok Bot app installation remains a user action.
+Node.js 22.19 or later is required. The launcher can select a compatible local NVM or fnm runtime. If none is available, ask the user to install a supported Node.js version. Grok Bot installation and sign-in remain user actions.
 
-macOS app detection and encrypted legacy login were live-tested. Windows/Linux use standard installation paths and the upstream CLI's supported native session. Custom installations can set `XG_GROK_APP_PATH`; conservative detection can produce a false negative. Windows/Linux end-to-end behavior has not been live-verified.
+App discovery uses standard platform paths. Set `XG_GROK_APP_PATH` for a custom installation. Native authentication is handled by the upstream CLI; the optional legacy encrypted-session adapter supports macOS only.
 
 ## Authentication
 
-Prefer the upstream CLI's native encrypted `gateway-descriptor.json`, or the credentials already supplied by the user's environment. Do not print credentials. The wrapper sends no direct X or Grok gateway requests: all research and bot operations go through grok-bot-cli.
+Use the upstream encrypted app session or credentials already supplied in the user's environment. All bot and research operations go through grok-bot-cli. Do not print credentials.
 
-An observed macOS app version did not produce a gateway descriptor. The opt-in legacy adapter reads only that app's known `sand-secrets.json` active-account access-token entry and the `Grok Bot Safe Storage` keychain item, using the existing encrypted storage format. It passes the access token to the Grok CLI child process in memory. It does not read a refresh token, persist plaintext credentials, copy credentials into a skill, or grant itself keychain permission. Unknown storage formats fail explicitly.
+For a legacy macOS app session, the opt-in adapter reads the known `sand-secrets.json` active-account access-token entry and the existing `Grok Bot Safe Storage` keychain item. It decrypts the supported storage format in memory and passes the access token to the Grok CLI child process. It does not read refresh tokens, persist plaintext credentials, or approve keychain permissions. Unsupported formats fail explicitly.
 
-`setup --authorize-app-session` records a non-secret authorization preference. Notify the user before invoking it; if authorization is not established, ask before that operation. A macOS prompt requires the user's action. Do not automate system approval. To revoke the wrapper preference, remove `legacySessionAuthorized` from its local config; this does not sign out the Grok app.
+`setup --authorize-app-session` saves a non-secret authorization preference. Notify the user before invoking it and obtain consent if access is not already authorized. Operating-system prompts require the user's action. Removing `legacySessionAuthorized` from local configuration revokes this adapter preference without signing out the Grok app.
 
-The app's installed version is used for `SAND_CLIENT_VERSION` because the upstream default version was observed to be rejected. The tool does not impersonate a guessed newer version. Custom app installations may set `XG_GROK_CLIENT_VERSION` to their actual installed app version. A 401 still requires sign-in/update; no automatic refresh-token flow is implemented.
+The installed app version supplies `SAND_CLIENT_VERSION`. Custom installations may use `XG_GROK_CLIENT_VERSION` for their actual version. Authentication errors require appropriate sign-in or app updates; there is no automatic refresh-token flow.
 
 ## State and isolation
 
-State defaults to `$XDG_STATE_HOME/x-cli-via-grok`, or `~/.local/state/x-cli-via-grok`; on Windows it uses `%LOCALAPPDATA%/x-cli-via-grok`. `XG_STATE_DIR` overrides it.
+The default state directory is `$XDG_STATE_HOME/x-cli-via-grok` or `~/.local/state/x-cli-via-grok`. Windows uses `%LOCALAPPDATA%/x-cli-via-grok`. `XG_STATE_DIR` overrides the location.
 
-- `config.json`: profile-scoped bot ID, authorization preference, active run and uncertain creation receipt.
-- `runs/<UUID>.json`: readable research prompt, session ID, root/gateway request ID, matching messages and final answer.
-- `operation.lock/`: local process ownership, released when the command exits normally.
+- `config.json`: profile-scoped bot selection, authorization preference, active request, and uncertain bot creation state.
+- `runs/<UUID>.json`: the self-contained prompt, session ID, root and gateway request IDs, matching replies, and final answer.
+- `operation.lock/`: local process ownership for configuration and submission operations.
 
-Directories/files are created with 0700/0600 POSIX modes where supported. Windows relies on the user's profile-directory ACLs. Local research history is not uploaded to GitHub. Retention is explicit: the tool does not silently delete history or the user's remote messages.
+Files and directories use private POSIX modes where supported. Windows relies on the user's profile-directory permissions. State remains outside the repository and is retained until the user removes it. The tool does not silently delete remote messages or local history.
 
-Never confuse a CLI envelope/correlation ID, the local run UUID, and the gateway requestId. Only the gateway requestId on the actual user transcript entry is used to select replies. A unique readable run marker discovers that root. Rooted reads can omit assistant send-message entries in the observed upstream version. The adapter merges the rooted read with a bounded transcript tail when necessary, then filters by exact requestId and bot ID before returning any content.
+The local run UUID, CLI envelope ID, and gateway request ID are distinct. A unique run marker identifies the user root. Reply selection requires the actual gateway request ID and dedicated bot ID. Rooted reads may omit assistant messages; the adapter combines them with a bounded transcript tail and filters ownership before returning content.
 
-The upstream plain CLI send does not provide a verified idempotency key or a server-memory reset. Unknown deliveries stay pending and are reconciled by reading; they are never automatically retried. Unknown bot creation is reconciled against the live roster before another create can be attempted.
+Plain CLI sends do not provide a guaranteed idempotency key. Uncertain deliveries stay pending for reconciliation and are not automatically resent. Uncertain bot creation is checked against the roster before another creation.
 
-There is one active local run per profile, not one new remote bot per session. Two machines have separate locks; simultaneous first setup or external writes are not globally serialized. Account binding for environment-only credentials is weaker than the app's stable active-account identity; always verify the saved bot ID still belongs to the active roster.
+One request can be active per local account profile. Separate devices do not share locks. Account binding with environment-only credentials depends on the credential source; verify that the saved bot still belongs to the active roster. The dedicated bot retains shared server memory.
 
 ## Recovery
 
-- `AUTH_REQUIRED`: open/sign in or update Grok Bot; notify the user. Do not print or solicit tokens.
-- `BOT_AMBIGUOUS`: select one listed purpose-specific bot using `setup --bot-id ID`; never silently reuse a general-purpose bot.
-- `RESEARCH_BUSY`: read the supplied runId. No extra bot is created.
-- `delivery_unknown`: use `read`; do not resend. If the root is beyond the 200-entry tail, inspect Grok UI and report a coverage gap.
-- `TRANSCRIPT_SCHEMA_CHANGED` / `REQUEST_ID_MISSING`: stop result routing and update the adapter. Never return an unfiltered transcript.
-- A process crash can leave a lock. `recover-lock` only removes it after proving its PID no longer exists on this hostname. It does not cancel or release an active research run.
-- An upstream reply without `XG_DONE <runId>` stays pending. After the user verifies that Grok has finished, `release RUN_ID --confirmed-finished` releases only local bookkeeping. It does not cancel remote work or clear shared memory. Do not call it automatically to bypass serialization.
+| Condition | Action |
+| --- | --- |
+| `AUTH_REQUIRED` | Notify the user and reopen, sign in to, or update Grok Bot as appropriate. Do not solicit tokens. |
+| `BOT_AMBIGUOUS` | Select an eligible dedicated bot with `setup --bot-id ID`. |
+| `RESEARCH_BUSY` | Read the returned run ID instead of creating another bot. |
+| `delivery_unknown` | Read the existing request. Do not resend it. |
+| Transcript coverage gap | Inspect the dedicated bot and report the gap. Do not return another session's content. |
+| `TRANSCRIPT_SCHEMA_CHANGED` or `REQUEST_ID_MISSING` | Stop result routing and update the adapter. |
+| Stale local process lock | Use `recover-lock` only when the recorded process has stopped on the same host. Active research remains pending. |
+| Missing completion marker | After the user confirms remote work finished, use `release RUN_ID --confirmed-finished` to release local bookkeeping only. |
 
-## Trigger examples
+Lock recovery and local release do not cancel Grok work, delete a bot, or clear shared memory.
 
-Use: “查 X 上最近三个月关于 Booking.com 的讨论”；“Twitter 上大家怎么评价这个产品”；“汇总这个账号最近一周的公开帖子”；“核对一条在 X 流传的说法”。
+## Invocation scope
 
-Do not use: “帮我写一条推文”；“替我发帖/私信”；“解释 Grok 模型”；“全网查某公司的新闻” without Twitter/X scope；“在代码里把变量 x 改名”。
+Use this skill for public X searches, account summaries, discussion analysis, and checking claims circulating on X. Examples include "Summarize recent X discussion about a product" and "Find this account's public posts from last week."
+
+Do not use it for tweet drafting, publishing, direct messages, general Grok questions, generic web research without X scope, or software tasks that merely use a variable named x.
