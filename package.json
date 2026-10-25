@@ -1,0 +1,15 @@
+{
+  "name": "x-cli-via-grok",
+  "version": "0.1.0",
+  "description": "Public Twitter/X research through a dedicated Grok Bot, with portable agent skills.",
+  "type": "module",
+  "bin": {"x-cli-via-grok": "bin/x-cli-via-grok.mjs"},
+  "engines": {"node": ">=22.19.0"},
+  "scripts": {"test": "node --test", "check": "node --check skills/x-research-via-grok/scripts/xg.mjs && node --test"},
+  "files": ["bin", "skills", "docs", "README.md", "LICENSE"],
+  "repository": {"type": "git", "url": "git+https://github.com/mcsuen/x-cli-via-grok.git"},
+  "homepage": "https://github.com/mcsuen/x-cli-via-grok#readme",
+  "bugs": {"url": "https://github.com/mcsuen/x-cli-via-grok/issues"},
+  "license": "MIT",
+  "keywords": ["twitter", "x", "grok", "grok-bot-cli", "agent-skills", "codex", "claude-code"]
+}
