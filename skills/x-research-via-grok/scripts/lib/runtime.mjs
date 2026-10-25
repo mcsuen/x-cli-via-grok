@@ -5,7 +5,7 @@ import { homedir, hostname } from 'node:os';
 import { join, dirname, delimiter } from 'node:path';
 import { randomUUID } from 'node:crypto';
 
-export const VERSION = '0.1.1';
+export const VERSION = '0.2.0';
 export class XgError extends Error {
   constructor(code, message, details = {}) { super(message); this.code = code; this.details = details; }
 }

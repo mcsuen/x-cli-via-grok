@@ -2,6 +2,10 @@
 
 ## Environment and installation
 
+`install --host codex|claude|both` installs the skill and completes initialization in one invocation. Defaults are `~/.agents/skills` for Codex and `~/.claude/skills` for Claude Code; `--dir` selects an existing custom discovery directory for one host. Install for both hosts only when requested. A local content-hash receipt supports updates of unmodified managed skills while preserving custom content. The skill runtime remains usable after the source checkout is removed.
+
+`ready` confirms live account access and a prepared dedicated bot. `needs_user_action` returns exit code 1 and a concrete `nextAction`; keep installed files and rerun installation after the required action. The installer sends no research query. Announce authentication and bot preparation before invoking it.
+
 `doctor` checks app installation, Node compatibility, CLI availability, saved-session presence, and local lock metadata. Saved files do not establish a valid login. `doctor --online` verifies access to the live bot roster without creating a bot.
 
 `setup` installs a missing `grok-bot-cli@0.12.4` through npm into the private `runtime/` directory. Installation uses `--ignore-scripts`, requires no sudo, and leaves global PATH unchanged. `setup --install-cli` installs the pinned version privately even when another version exists globally.

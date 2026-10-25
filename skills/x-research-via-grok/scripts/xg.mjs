@@ -1,16 +1,21 @@
 #!/usr/bin/env node
-import { readFile, readdir, cp, mkdir, realpath } from 'node:fs/promises';
-import { join, dirname, resolve } from 'node:path';
-import { homedir } from 'node:os';
+import { readFile, readdir, realpath } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { execute, stateDir, readJson, saveJson, withLock, recoverLock, exists, XgError, VERSION, redact } from './lib/runtime.mjs';
 import { nodeCompatible, findCompatibleNode, connect, inspectEnvironment, installGrokCli, detectApp } from './lib/environment.mjs';
 import { dateWindow, buildPrompt } from './lib/prompt.mjs';
+import { installSkill, installCapability } from './lib/installation.mjs';
 import { loadConfig, configPath, ensureBot, beginResearch, pollResearch, runPath, releaseResearch, sessionId } from './lib/research.mjs';
+export { installSkill } from './lib/installation.mjs';
 
 const HELP = `x-cli-via-grok ${VERSION} — public Twitter/X research through Grok Bot
 
+  install --host codex|claude|both           Install the skill and initialize the research capability
+          [--dir DIRECTORY]                 Optional custom skills parent directory (one host)
+          [--authorize-app-session]         Allow the existing legacy macOS app login
+          [--install-cli] [--bot-id ID]      Private pinned CLI install; select a dedicated bot
   doctor [--online]                         Check app, CLI and login; offline by default
   setup [--authorize-app-session]           Install missing CLI, verify login, reuse/create a dedicated bot
         [--install-cli] [--bot-id ID]        Private pinned CLI install; choose an existing dedicated bot
@@ -30,6 +35,7 @@ Dates are inclusive; omitted dates default to the last 7 calendar days. No posti
 Node.js 22.19+ and the installed, signed-in Grok Bot desktop app are required.
 `;
 const optionsByCommand = {
+  install: ['host', 'dir', 'authorize-app-session', 'install-cli', 'bot-id'],
   doctor: ['online'], setup: ['authorize-app-session', 'install-cli', 'bot-id'],
   plan: ['prompt-file', 'query', 'session', 'since', 'until', 'timezone', 'language'],
   query: ['prompt-file', 'query', 'session', 'since', 'until', 'timezone', 'language', 'wait'],
@@ -65,33 +71,22 @@ async function requestInput(options) {
   const window = dateWindow({ since: options.since, until: options.until, timezone: options.timezone });
   return { goal, window, session: options.session, language: options.language };
 }
-export async function installSkill({ host, dir }) {
-  if (!['codex', 'claude', 'both'].includes(host) || (dir && host === 'both')) throw new XgError('HOST_REQUIRED', 'Use --host codex, claude or both. A custom --dir accepts one host only.');
-  const source = resolve(dirname(fileURLToPath(import.meta.url)), '..');
-  const targets = host === 'both' ? ['codex', 'claude'] : [host];
-  const destinations = targets.map(target => join(dir ? resolve(dir) : target === 'codex' ? join(process.env.CODEX_HOME || join(homedir(), '.codex'), 'skills') : join(homedir(), '.claude', 'skills'), 'x-research-via-grok'));
-  async function sameTree(from, to) {
-    const [a, b] = await Promise.all([readdir(from, { withFileTypes: true }), readdir(to, { withFileTypes: true })]);
-    if (a.length !== b.length) return false;
-    for (const entry of a) {
-      const other = b.find(x => x.name === entry.name);
-      if (!other || entry.isDirectory() !== other.isDirectory() || entry.isSymbolicLink() || other.isSymbolicLink()) return false;
-      if (entry.isDirectory()) { if (!await sameTree(join(from, entry.name), join(to, entry.name))) return false; }
-      else if (!(await readFile(join(from, entry.name))).equals(await readFile(join(to, entry.name)))) return false;
-    }
-    return true;
+async function setupResearch(dir, config, options, { repairCli = false } = {}) {
+  if (options['install-cli']) {
+    const app = await detectApp();
+    if (!app.installed) throw new XgError('GROK_APP_REQUIRED', `Install and sign in to Grok Bot first: ${app.installUrl}`);
+    await installGrokCli(dir);
   }
-  // Preflight all destinations before copying anything. Existing identical installs are a no-op.
-  for (const destination of destinations) if (await exists(destination)) {
-    if (await realpath(destination) === await realpath(source) || await sameTree(source, destination)) continue;
-    throw new XgError('SKILL_EXISTS', `A skill already exists at ${destination}. Review it before replacing it; this installer will not overwrite it.`);
+  let connected;
+  try { connected = await connect(dir, config, { install: true, authorize: options['authorize-app-session'] }); }
+  catch (error) {
+    if (!repairCli || error.code !== 'CLI_VERSION_UNSUPPORTED' || process.env.XG_GROK_CLI) throw error;
+    await installGrokCli(dir);
+    connected = await connect(dir, config, { authorize: options['authorize-app-session'] });
   }
-  for (const destination of destinations) {
-    if (await exists(destination)) continue;
-    await mkdir(dirname(destination), { recursive: true });
-    await cp(source, destination, { recursive: true, force: false, errorOnExist: true });
-  }
-  return { status: 'installed', paths: destinations, note: 'Reopen the agent session if needed for skill discovery. Automatic selection is decided by the host model; installation does not force a trigger.' };
+  const bot = await ensureBot(connected.client, dir, config, { botId: options['bot-id'] });
+  if (options['authorize-app-session']) { config.legacySessionAuthorized = true; await saveJson(configPath(dir), config); }
+  return { status: 'ready', bot, profileKey: connected.client.profileKey, cli: connected.status.cli, isolation: 'one dedicated bot; separate local sessions and gateway request IDs; shared server memory' };
 }
 export async function main(argv = process.argv.slice(2)) {
   const { command, options, positionals } = parseArgs(argv);
@@ -111,6 +106,11 @@ export async function main(argv = process.argv.slice(2)) {
   if (command === 'recover-lock') return recoverLock(dir);
   return withLock(dir, async () => {
     const config = await loadConfig(dir);
+    if (command === 'install') {
+      process.stderr.write('Initialization notice: verifying the existing Grok login and preparing a dedicated X research bot. Handle any sign-in or operating-system authorization prompts yourself.\n');
+      return installCapability({ host: options.host, dir: options.dir }, { prepare: () => setupResearch(dir, config, options, { repairCli: true }) });
+    }
+    if (command === 'setup') return setupResearch(dir, config, options);
     if (command === 'sessions') {
       const runsDir = join(dir, 'runs');
       if (!await exists(runsDir)) return [];
@@ -125,21 +125,11 @@ export async function main(argv = process.argv.slice(2)) {
     const input = command === 'query' ? await requestInput(options) : null;
     const wait = options.wait === undefined ? (command === 'query' ? 40 : 0) : Number(options.wait);
     if (!Number.isFinite(wait) || wait < 0 || wait > 50) throw new XgError('WAIT_INVALID', 'wait must be between 0 and 50 seconds.');
-    if (options['install-cli']) {
-      const app = await detectApp();
-      if (!app.installed) throw new XgError('GROK_APP_REQUIRED', `Install and sign in to Grok Bot first: ${app.installUrl}`);
-      await installGrokCli(dir);
-    }
-    const connected = await connect(dir, config, { install: command === 'setup' || command === 'query', authorize: options['authorize-app-session'] });
+    const connected = await connect(dir, config, { install: command === 'query' });
     const { client } = connected;
     if (command === 'doctor') {
       await client.listBots();
       return { ...connected.status, authentication: { ...connected.status.authentication, verified: true }, profileKey: client.profileKey, note: 'Login verified; no bot was created or changed.' };
-    }
-    if (command === 'setup') {
-      const bot = await ensureBot(client, dir, config, { botId: options['bot-id'] });
-      if (options['authorize-app-session']) { config.legacySessionAuthorized = true; await saveJson(configPath(dir), config); }
-      return { status: 'ready', bot, profileKey: client.profileKey, cli: connected.status.cli, isolation: 'one dedicated bot; separate local sessions and gateway request IDs; shared server memory' };
     }
     if (command === 'query') {
       const run = await beginResearch(client, dir, config, input);
@@ -163,6 +153,7 @@ export async function launch() {
     }
     const result = await main();
     if (result !== undefined) process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
+    if (result?.status === 'needs_user_action') process.exitCode = 1;
   } catch (e) {
     process.stderr.write(`${JSON.stringify({ error: { code: e.code || 'FAILED', message: redact(e.message), ...(e.details || {}) } }, null, 2)}\n`);
     process.exitCode = 1;

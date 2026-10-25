@@ -15,6 +15,8 @@ Agent Skill -> standalone Node CLI -> grok-bot-cli -> dedicated Grok Bot -> publ
 
 The package entrypoint imports the runtime inside the skill directory. Both installation forms use the same implementation. There is no separate web service, background daemon, or direct X API client.
 
+The installation command copies the self-contained skill and initializes the authenticated research environment. It reports readiness only after live bot access and dedicated bot preparation. Missing user actions produce a resumable structured response. Local content-hash receipts allow unmodified managed skills to update while preserving custom content. No authentication or research runs are performed by npm lifecycle hooks.
+
 ## Request lifecycle
 
 1. Acquire a local operation lock and resolve the active account profile.

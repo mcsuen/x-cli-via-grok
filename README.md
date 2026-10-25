@@ -14,18 +14,38 @@ The CLI installs a missing `grok-bot-cli` into its private runtime directory. Gr
 
 ## Installation
 
+Ask Codex or Claude Code:
+
+> Install https://github.com/mcsuen/x-cli-via-grok and complete its initialization.
+
+**For the installing agent:** follow [INSTALL.md](INSTALL.md). Install for the current host, prepare dependencies, verify the existing Grok login, and prepare the dedicated research bot. Report success only when the installer returns `ready` and the host can discover the skill. Account sign-in and OS authorization may require the user's action.
+
+From a source checkout, one command installs and initializes the capability without a global npm package:
+
 ```sh
-npm install --global github:mcsuen/x-cli-via-grok
-x-cli-via-grok install-skill --host both
+node bin/x-cli-via-grok.mjs install --host codex --json
 ```
 
-Use `--host codex` or `--host claude` to install for one host. The default skill locations are `$CODEX_HOME/skills` (or `~/.codex/skills`) and `~/.claude/skills`.
+Use `--host claude` for Claude Code, or `--host both` when both hosts are requested. The defaults are `~/.agents/skills` for Codex and `~/.claude/skills` for Claude Code. `--dir DIRECTORY` selects a custom skills parent for one host. Keep an existing active installation in its discovery directory to avoid duplicate copies.
 
-Other Agent Skills hosts can install `skills/x-research-via-grok/` directly. The skill includes its runtime and does not depend on the repository working directory. Identical installations are reused; user-modified skills are not overwritten. Reopen the agent session when required for discovery.
+For an optional global CLI:
+
+```sh
+npm install --global github:mcsuen/x-cli-via-grok
+x-cli-via-grok install --host codex --json
+```
+
+Use a user-writable npm prefix; administrator access is unnecessary. `install-skill` remains available for copying only the skill, and `setup` initializes an already-installed capability.
+
+Other Agent Skills hosts can install `skills/x-research-via-grok/` directly. The skill includes its runtime and does not depend on the repository working directory. Identical installations are reused; unmodified managed installations can be updated. Custom or differing unmanaged skills are preserved. Reload skills or reopen the agent session when required for discovery.
 
 Automatic invocation depends on the host's skill discovery and model selection. Claude Code supports the provided installation path; Claude Desktop requires a separate compatible local-tool integration.
 
 ## Setup
+
+`install` performs this initialization after installing the skill. It returns `ready` only after live login verification and dedicated bot preparation. `needs_user_action` includes a concrete `nextAction` and uses exit code 1; rerun the same command after completing that action. Installed skill files remain available while app installation or sign-in is pending.
+
+For an already-installed skill or CLI:
 
 ```sh
 x-cli-via-grok doctor --json

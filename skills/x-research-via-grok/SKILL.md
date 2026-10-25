@@ -13,6 +13,8 @@ Use Grok CLI to retrieve and analyze public Twitter/X content. The scope is publ
 
 Run the bundled `scripts/xg.mjs` using the absolute path of this skill directory. Its runtime is self-contained; it requires neither the repository working directory nor a global x-cli-via-grok installation.
 
+When the user explicitly asks to install or finish initializing this capability, run the bundled `install --host codex|claude --json` for the current host. Preserve an existing active skill directory with `--dir` if it differs from the default. Installation is complete only at `ready`; follow a returned `nextAction` and resume after required user actions. Installation does not broaden this skill's automatic trigger beyond public X research.
+
 1. Start with `node <skill-dir>/scripts/xg.mjs doctor --json`. This offline check does not read the keychain, verify online login, or create a bot.
 2. If Grok Bot is missing, direct the user to <https://cursor.com/sand> to install, open, and sign in to the desktop application. The grok.com website alone is insufficient. Leave app installation and account creation to the user.
 3. Run `setup --json` to verify online access and prepare the dedicated bot. A missing grok-bot-cli is installed from npm into a private directory at the pinned version. Existing supported installations are reused without administrator access.

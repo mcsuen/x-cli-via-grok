@@ -10,3 +10,4 @@ coverage/
 *.jsonl
 runs/
 runtime/
+.x-cli-via-grok.json
